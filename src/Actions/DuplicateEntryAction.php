@@ -2,6 +2,7 @@
 
 namespace DoubleThreeDigital\Duplicator\Actions;
 
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Statamic\Actions\Action;
 use Statamic\Contracts\Entries\Entry as AnEntry;
@@ -57,11 +58,15 @@ class DuplicateEntryAction extends Action
                     $itemParent = $this->getEntryParentFromStructure($item);
                     $itemTitleAndSlug = $this->generateTitleAndSlug($item);
 
+                    $defaults = config('duplicator.defaults');
+                    if(!empty($defaults['author']) && $defaults['author'] === '_SELF') {
+                        $defaults['author'] = Auth::id();
+                    }
+
                     $entry = Entry::make()
                         ->collection($item->collection())
                         ->blueprint($item->blueprint()->handle())
                         ->locale(isset($values['site']) && $values['site'] !== 'all' ? $values['site'] : $item->locale())
-                        ->published(config('duplicator.defaults.published', $item->published()))
                         ->slug($itemTitleAndSlug['slug'])
                         ->data(
                             $item->data()
@@ -69,6 +74,7 @@ class DuplicateEntryAction extends Action
                                 ->merge([
                                     'title' => $itemTitleAndSlug['title'],
                                 ])
+                                ->merge($defaults)
                                 ->toArray()
                         );
 
@@ -146,14 +152,16 @@ class DuplicateEntryAction extends Action
             $title .= ' (' . $attempt . ')';
         }
 
-        $slug .= '-' . $attempt;
+        if(!empty($slug)) { 
+            $slug .= '-' . $attempt;
 
-        // If the slug we've just built already exists, we'll try again, recursively.
-        if (Entry::findBySlug($slug, $entry->collection()->handle())) {
-            $generate = $this->generateTitleAndSlug($entry, $attempt + 1);
+            // If the slug we've just built already exists, we'll try again, recursively.
+            if (Entry::findBySlug($slug, $entry->collection()->handle())) {
+                $generate = $this->generateTitleAndSlug($entry, $attempt + 1);
 
-            $title = $generate['title'];
-            $slug = $generate['slug'];
+                $title = $generate['title'];
+                $slug = $generate['slug'];
+            }
         }
 
         return [
